@@ -1,0 +1,253 @@
+zabbix_export:
+  version: '6.4'
+  template_groups:
+    -
+      uuid: 26f42bba0c4448c290fa5423bb4a2664
+      name: 'Custom Templates'
+  templates:
+    -
+      uuid: 430b8fd981c8459db2be5e212661333e
+      template: 'Processes monitor'
+      name: 'Processes monitor'
+      description: |
+        Monitor processes/services are running.
+        Use Macro to define a list of process to be monitored, and what are those criticals
+      groups:
+        -
+          name: 'Custom Templates'
+      items:
+        -
+          uuid: e021e274efb3446a8a7e36757d34e97a
+          name: 'Get raw process info'
+          type: ZABBIX_ACTIVE
+          key: proc.get
+          history: 1h
+          trends: '0'
+          value_type: TEXT
+          preprocessing:
+            -
+              type: JAVASCRIPT
+              parameters:
+                - |
+                  // Remove some unneeded fields 
+                  
+                  var processString = '{$PROCESSES.LIST}';
+                  var processArray = processString.split(',');
+                  var processFilter = [];
+                  for (var i = 0; i < processArray.length; i++) {
+                    processFilter.push(processArray[i].trim());
+                  }
+                  
+                  var Jsonvalue = JSON.parse(value);
+                  var filteredJson = [];
+                  
+                  for (var key in Jsonvalue) {
+                    if (Jsonvalue.hasOwnProperty(key)) {
+                      var obj = Jsonvalue[key];
+                      if (processFilter.indexOf(obj.name) !== -1) {
+                        filteredJson.push({
+                          name: obj.name,
+                          cputime_user: obj.cputime_user,
+                          cputime_system: obj.cputime_system,
+                          pid: obj.pid,
+                          cmdline: obj.cmdline,
+                          threads: obj.threads,
+                          memory: obj.rss,
+                          swap: obj.swap,
+                          user: obj.user
+                        });
+                      }
+                    }
+                  }
+                  
+                  return JSON.stringify(filteredJson);
+          tags:
+            -
+              tag: component
+              value: raw
+      discovery_rules:
+        -
+          uuid: f6d092d8e8dc42ce8c2229fcd3e490ac
+          name: 'Create processes'
+          type: SCRIPT
+          key: get.processes
+          params: |
+            // Discover based on {$PROCESSES.LIST} Macro
+            var obj = JSON.parse(value);
+            var inputlist = obj.inputlist;
+            var processArray = inputlist.split(',');
+            
+            // Remove "CHANGE_THIS" from the array
+            for (var i = processArray.length - 1; i >= 0; i--) {
+              if (processArray[i] === "CHANGE_THIS") {
+                processArray.splice(i, 1);
+              }
+            }
+            
+            var processes = processArray.map(function (process) {
+              return { "process": process };
+            });
+            
+            return JSON.stringify(processes);
+          lifetime: 1h
+          item_prototypes:
+            -
+              uuid: c9b943010f434560b0418034006e811f
+              name: 'Process {#PROCESS.NAME} command line'
+              type: DEPENDENT
+              key: 'proc[{#PROCESS.NAME},cmdline]'
+              delay: '0'
+              history: 365d
+              trends: '0'
+              value_type: TEXT
+              preprocessing:
+                -
+                  type: JSONPATH
+                  parameters:
+                    - '$.[?(@.name=="{#PROCESS.NAME}")].cmdline.first()'
+                  error_handler: DISCARD_VALUE
+                -
+                  type: DISCARD_UNCHANGED
+                  parameters:
+                    - ''
+              master_item:
+                key: proc.get
+              tags:
+                -
+                  tag: component
+                  value: 'process-{#PROCESS.NAME}'
+            -
+              uuid: d74c7d8fb3b0489db0ca5507a34063b8
+              name: 'Process {#PROCESS.NAME} cpu time (user)'
+              type: DEPENDENT
+              key: 'proc[{#PROCESS.NAME},cpuuser]'
+              delay: '0'
+              history: 1w
+              value_type: FLOAT
+              units: s
+              preprocessing:
+                -
+                  type: JSONPATH
+                  parameters:
+                    - '$.[?(@.name=="{#PROCESS.NAME}")].cputime_user.sum()'
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '0'
+              master_item:
+                key: proc.get
+              tags:
+                -
+                  tag: component
+                  value: 'process-{#PROCESS.NAME}'
+            -
+              uuid: 447be65232d24163b5f80803aac18605
+              name: 'Process {#PROCESS.NAME} memory usage'
+              type: DEPENDENT
+              key: 'proc[{#PROCESS.NAME},memory]'
+              delay: '0'
+              history: 1w
+              units: B
+              preprocessing:
+                -
+                  type: JSONPATH
+                  parameters:
+                    - '$.[?(@.name=="{#PROCESS.NAME}")].memory.sum()'
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '0'
+              master_item:
+                key: proc.get
+              tags:
+                -
+                  tag: component
+                  value: 'process-{#PROCESS.NAME}'
+            -
+              uuid: 2d998d84771245dd9aa82cdfd64c9c65
+              name: 'Process {#PROCESS.NAME} running'
+              type: DEPENDENT
+              key: 'proc[{#PROCESS.NAME},running]'
+              delay: '0'
+              history: 1w
+              valuemap:
+                name: 'Process status'
+              preprocessing:
+                -
+                  type: JSONPATH
+                  parameters:
+                    - '$.[?(@.name=="{#PROCESS.NAME}")].name.length()'
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '0'
+              master_item:
+                key: proc.get
+              tags:
+                -
+                  tag: component
+                  value: 'process-{#PROCESS.NAME}'
+              trigger_prototypes:
+                -
+                  uuid: d4013b91c86f46379c7696e0ee94e8ac
+                  expression: 'max(/Processes monitor/proc[{#PROCESS.NAME},running],5m)=0'
+                  recovery_mode: RECOVERY_EXPRESSION
+                  recovery_expression: 'min(/Processes monitor/proc[{#PROCESS.NAME},running],5m)>0'
+                  name: 'Process {#PROCESS.NAME} is not running'
+                  priority: AVERAGE
+                  tags:
+                    -
+                      tag: scope
+                      value: availability
+          parameters:
+            -
+              name: inputlist
+              value: '{$PROCESSES.LIST}'
+          lld_macro_paths:
+            -
+              lld_macro: '{#PROCESS.NAME}'
+              path: $.process
+          overrides:
+            -
+              name: 'Critical processes'
+              step: '1'
+              filter:
+                conditions:
+                  -
+                    macro: '{#PROCESS.NAME}'
+                    value: '{$PROCESS.CRIT}'
+                    formulaid: A
+              operations:
+                -
+                  operationobject: TRIGGER_PROTOTYPE
+                  operator: LIKE
+                  value: 'is not running'
+                  severity: HIGH
+                -
+                  operationobject: ITEM_PROTOTYPE
+                  tags:
+                    -
+                      tag: scope
+                      value: critical-process
+      tags:
+        -
+          tag: class
+          value: os
+        -
+          tag: target
+          value: processes
+      macros:
+        -
+          macro: '{$PROCESSES.CRIT}'
+          value: CHANGE_THIS
+          description: 'Which ones of the processes will have a critical trigger'
+        -
+          macro: '{$PROCESSES.LIST}'
+          value: CHANGE_THIS
+          description: 'List of all process to be monitored, coma delimited. Example: systemd,ndbmtd,process 1,process 2'
+      valuemaps:
+        -
+          uuid: c218a7c0b5484bfc85cee58ceb1c127e
+          name: 'Process status'
+          mappings:
+            -
+              value: '0'
+              newvalue: 'Not running'
+            -
+              type: GREATER_OR_EQUAL
+              value: '1'
+              newvalue: Running
