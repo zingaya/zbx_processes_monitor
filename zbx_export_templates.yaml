@@ -1,23 +1,21 @@
 zabbix_export:
   version: '6.4'
   template_groups:
-    -
-      uuid: 26f42bba0c4448c290fa5423bb4a2664
+    - uuid: 26f42bba0c4448c290fa5423bb4a2664
       name: 'Custom Templates'
   templates:
-    -
-      uuid: 430b8fd981c8459db2be5e212661333e
+    - uuid: 430b8fd981c8459db2be5e212661333e
       template: 'Processes monitor'
       name: 'Processes monitor'
       description: |
         Monitor processes/services are running.
-        Use Macro to define a list of process to be monitored, and what are those criticals
+        Use the macro to define a list of process to be monitored, and what of those are critical
+        
+        Zabbix agent 6.2 and later
       groups:
-        -
-          name: 'Custom Templates'
+        - name: 'Custom Templates'
       items:
-        -
-          uuid: e021e274efb3446a8a7e36757d34e97a
+        - uuid: e021e274efb3446a8a7e36757d34e97a
           name: 'Get raw process info'
           type: ZABBIX_ACTIVE
           key: proc.get
@@ -25,8 +23,7 @@ zabbix_export:
           trends: '0'
           value_type: TEXT
           preprocessing:
-            -
-              type: JAVASCRIPT
+            - type: JAVASCRIPT
               parameters:
                 - |
                   // Remove some unneeded fields 
@@ -62,12 +59,10 @@ zabbix_export:
                   
                   return JSON.stringify(filteredJson);
           tags:
-            -
-              tag: component
+            - tag: component
               value: raw
       discovery_rules:
-        -
-          uuid: f6d092d8e8dc42ce8c2229fcd3e490ac
+        - uuid: f6d092d8e8dc42ce8c2229fcd3e490ac
           name: 'Create processes'
           type: SCRIPT
           key: get.processes
@@ -76,6 +71,10 @@ zabbix_export:
             var obj = JSON.parse(value);
             var inputlist = obj.inputlist;
             var processArray = inputlist.split(',');
+            var cmdlist = obj.commandlist;
+            var cmdArray = cmdlist.split(',');
+            var mmlist = obj.maxmemlist;
+            var mmArray = mmlist.split(',');
             
             // Remove "CHANGE_THIS" from the array
             for (var i = processArray.length - 1; i >= 0; i--) {
@@ -84,15 +83,30 @@ zabbix_export:
               }
             }
             
-            var processes = processArray.map(function (process) {
-              return { "process": process };
+            function parseMemory(memory) {
+              const units = { B: 1, K: 1024, M: 1024 * 1024, G: 1024 * 1024 * 1024, T: 1024 * 1024 * 1024 * 1024 };
+              const unit = memory.charAt(memory.length - 1).toUpperCase();
+              if (units[unit]) {
+                const numericValue = parseFloat(memory.slice(0, -1));
+                if (!isNaN(numericValue)) {
+                  return numericValue * units[unit];
+                }
+              }
+              return parseInt(memory); // If no unit or not recognized, treat as integer bytes
+            }
+            
+            var processes = processArray.map(function (process, index) {
+              return {
+                "process": process,
+                "command": cmdArray[index] || process,
+                "maxmemory": parseMemory(mmArray[index]) || 0
+              };
             });
             
             return JSON.stringify(processes);
           lifetime: 1h
           item_prototypes:
-            -
-              uuid: c9b943010f434560b0418034006e811f
+            - uuid: c9b943010f434560b0418034006e811f
               name: 'Process {#PROCESS.NAME} command line'
               type: DEPENDENT
               key: 'proc[{#PROCESS.NAME},cmdline]'
@@ -101,23 +115,38 @@ zabbix_export:
               trends: '0'
               value_type: TEXT
               preprocessing:
-                -
-                  type: JSONPATH
+                - type: JSONPATH
                   parameters:
                     - '$.[?(@.name=="{#PROCESS.NAME}")].cmdline.first()'
                   error_handler: DISCARD_VALUE
-                -
-                  type: DISCARD_UNCHANGED
+                - type: DISCARD_UNCHANGED_HEARTBEAT
                   parameters:
-                    - ''
+                    - 1w
               master_item:
                 key: proc.get
               tags:
-                -
-                  tag: component
+                - tag: component
                   value: 'process-{#PROCESS.NAME}'
-            -
-              uuid: d74c7d8fb3b0489db0ca5507a34063b8
+              trigger_prototypes:
+                - uuid: fffafb48d50e48a5a1b343feecab1355
+                  expression: |
+                    find(/Processes monitor/proc[{#PROCESS.NAME},cmdline],,,{#PROCESS.CMD})=0
+                    and
+                    last(/Processes monitor/proc[{#PROCESS.NAME},cmdline])<>""
+                  name: 'Process {#PROCESS.NAME} is not being executed with the exepected command line'
+                  opdata: 'Command: {ITEM.LASTVALUE2}'
+                  priority: INFO
+                  dependencies:
+                    - name: 'Process {#PROCESS.NAME} is not running'
+                      expression: |
+                        max(/Processes monitor/proc[{#PROCESS.NAME},running],5m)=0
+                        and
+                        last(/Processes monitor/proc[{#PROCESS.NAME},cmdline])<>""
+                      recovery_expression: 'last(/Processes monitor/proc[{#PROCESS.NAME},running])>0'
+                  tags:
+                    - tag: scope
+                      value: notice
+            - uuid: d74c7d8fb3b0489db0ca5507a34063b8
               name: 'Process {#PROCESS.NAME} cpu time (user)'
               type: DEPENDENT
               key: 'proc[{#PROCESS.NAME},cpuuser]'
@@ -126,8 +155,7 @@ zabbix_export:
               value_type: FLOAT
               units: s
               preprocessing:
-                -
-                  type: JSONPATH
+                - type: JSONPATH
                   parameters:
                     - '$.[?(@.name=="{#PROCESS.NAME}")].cputime_user.sum()'
                   error_handler: CUSTOM_VALUE
@@ -135,11 +163,9 @@ zabbix_export:
               master_item:
                 key: proc.get
               tags:
-                -
-                  tag: component
+                - tag: component
                   value: 'process-{#PROCESS.NAME}'
-            -
-              uuid: 447be65232d24163b5f80803aac18605
+            - uuid: 447be65232d24163b5f80803aac18605
               name: 'Process {#PROCESS.NAME} memory usage'
               type: DEPENDENT
               key: 'proc[{#PROCESS.NAME},memory]'
@@ -147,8 +173,7 @@ zabbix_export:
               history: 1w
               units: B
               preprocessing:
-                -
-                  type: JSONPATH
+                - type: JSONPATH
                   parameters:
                     - '$.[?(@.name=="{#PROCESS.NAME}")].memory.sum()'
                   error_handler: CUSTOM_VALUE
@@ -156,11 +181,27 @@ zabbix_export:
               master_item:
                 key: proc.get
               tags:
-                -
-                  tag: component
+                - tag: component
                   value: 'process-{#PROCESS.NAME}'
-            -
-              uuid: 2d998d84771245dd9aa82cdfd64c9c65
+              trigger_prototypes:
+                - uuid: b5697eb7517b4cb0abe8cda498b3bf25
+                  expression: 'min(/Processes monitor/proc[{#PROCESS.NAME},memory],15m)>{#PROCESS.MAXMEM}'
+                  name: 'Process {#PROCESS.NAME} memory usage is too high'
+                  event_name: 'Process {#PROCESS.NAME} memory usage is too high (>{#PROCESS.MAXMEM} for 15m)'
+                  opdata: 'Memory usage: {ITEM.LASTVALUE1}'
+                  discover: NO_DISCOVER
+                  priority: WARNING
+                  dependencies:
+                    - name: 'Process {#PROCESS.NAME} is not running'
+                      expression: |
+                        max(/Processes monitor/proc[{#PROCESS.NAME},running],5m)=0
+                        and
+                        last(/Processes monitor/proc[{#PROCESS.NAME},cmdline])<>""
+                      recovery_expression: 'last(/Processes monitor/proc[{#PROCESS.NAME},running])>0'
+                  tags:
+                    - tag: scope
+                      value: performance
+            - uuid: 2d998d84771245dd9aa82cdfd64c9c65
               name: 'Process {#PROCESS.NAME} running'
               type: DEPENDENT
               key: 'proc[{#PROCESS.NAME},running]'
@@ -169,8 +210,7 @@ zabbix_export:
               valuemap:
                 name: 'Process status'
               preprocessing:
-                -
-                  type: JSONPATH
+                - type: JSONPATH
                   parameters:
                     - '$.[?(@.name=="{#PROCESS.NAME}")].name.length()'
                   error_handler: CUSTOM_VALUE
@@ -178,76 +218,91 @@ zabbix_export:
               master_item:
                 key: proc.get
               tags:
-                -
-                  tag: component
+                - tag: component
                   value: 'process-{#PROCESS.NAME}'
-              trigger_prototypes:
-                -
-                  uuid: d4013b91c86f46379c7696e0ee94e8ac
-                  expression: 'max(/Processes monitor/proc[{#PROCESS.NAME},running],5m)=0'
-                  recovery_mode: RECOVERY_EXPRESSION
-                  recovery_expression: 'min(/Processes monitor/proc[{#PROCESS.NAME},running],5m)>0'
-                  name: 'Process {#PROCESS.NAME} is not running'
-                  priority: AVERAGE
-                  tags:
-                    -
-                      tag: scope
-                      value: availability
+          trigger_prototypes:
+            - uuid: d4013b91c86f46379c7696e0ee94e8ac
+              expression: |
+                max(/Processes monitor/proc[{#PROCESS.NAME},running],5m)=0
+                and
+                last(/Processes monitor/proc[{#PROCESS.NAME},cmdline])<>""
+              recovery_mode: RECOVERY_EXPRESSION
+              recovery_expression: 'last(/Processes monitor/proc[{#PROCESS.NAME},running])>0'
+              name: 'Process {#PROCESS.NAME} is not running'
+              opdata: 'Status: {ITEM.LASTVALUE1} - Command: {ITEM.LASTVALUE2}'
+              priority: AVERAGE
+              tags:
+                - tag: scope
+                  value: availability
           parameters:
-            -
-              name: inputlist
+            - name: inputlist
               value: '{$PROCESSES.LIST}'
+            - name: commandlist
+              value: '{$PROCESSES.CMD}'
+            - name: maxmemlist
+              value: '{$PROCESSES.MAXMEM}'
           lld_macro_paths:
-            -
-              lld_macro: '{#PROCESS.NAME}'
+            - lld_macro: '{#PROCESS.CMD}'
+              path: $.command
+            - lld_macro: '{#PROCESS.MAXMEM}'
+              path: $.maxmemory
+            - lld_macro: '{#PROCESS.NAME}'
               path: $.process
           overrides:
-            -
-              name: 'Critical processes'
+            - name: 'Critical processes'
               step: '1'
               filter:
                 conditions:
-                  -
-                    macro: '{#PROCESS.NAME}'
+                  - macro: '{#PROCESS.NAME}'
                     value: '{$PROCESS.CRIT}'
                     formulaid: A
               operations:
-                -
-                  operationobject: TRIGGER_PROTOTYPE
+                - operationobject: TRIGGER_PROTOTYPE
                   operator: LIKE
                   value: 'is not running'
                   severity: HIGH
-                -
-                  operationobject: ITEM_PROTOTYPE
+                - operationobject: ITEM_PROTOTYPE
                   tags:
-                    -
-                      tag: scope
+                    - tag: scope
                       value: critical-process
+                - operationobject: TRIGGER_PROTOTYPE
+                  operator: LIKE
+                  value: 'is not being executed with the exepected command line'
+                  severity: AVERAGE
+            - name: 'Memory threshold'
+              step: '2'
+              filter:
+                conditions:
+                  - macro: '{#PROCESS.MAXMEM}'
+                    value: '^[1-9][0-9]*$'
+                    formulaid: A
+              operations:
+                - operationobject: TRIGGER_PROTOTYPE
+                  operator: LIKE
+                  value: 'memory usage'
+                  discover: DISCOVER
       tags:
-        -
-          tag: class
+        - tag: class
           value: os
-        -
-          tag: target
+        - tag: target
           value: processes
       macros:
-        -
-          macro: '{$PROCESSES.CRIT}'
+        - macro: '{$PROCESSES.CMD}'
+          description: 'Optional per-process command parameters or paths. Correlates with "Processes list." Omit for default behavior. Example: systemd,-c 10.0.0.1,,/path/process_2.'
+        - macro: '{$PROCESSES.CRIT}'
           value: CHANGE_THIS
           description: 'Which ones of the processes will have a critical trigger'
-        -
-          macro: '{$PROCESSES.LIST}'
+        - macro: '{$PROCESSES.LIST}'
           value: CHANGE_THIS
-          description: 'List of all process to be monitored, coma delimited. Example: systemd,ndbmtd,process 1,process 2'
+          description: 'A coma delimited list of all process to be monitored. Example: systemd,ndbmtd,process_1,process_2'
+        - macro: '{$PROCESSES.MAXMEM}'
+          description: 'Optional per-process maximum memory usage. Correlates with "Processes list." Omit or zero for infinite usage. Example: 10K,0,,2G'
       valuemaps:
-        -
-          uuid: c218a7c0b5484bfc85cee58ceb1c127e
+        - uuid: c218a7c0b5484bfc85cee58ceb1c127e
           name: 'Process status'
           mappings:
-            -
-              value: '0'
+            - value: '0'
               newvalue: 'Not running'
-            -
-              type: GREATER_OR_EQUAL
+            - type: GREATER_OR_EQUAL
               value: '1'
               newvalue: Running
