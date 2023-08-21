@@ -2,13 +2,17 @@
 
 ## Description
 
-This is a Zabbix template designed to monitor processes and services running on a system using the Zabbix agent (version 6.2 and later).
+This template allows you to monitor various processes and services running on a system using Zabbix agent. 
+Define a list of processes to be monitored, and the LLD will create the items regardless if the processes are currently running or not. And optionally set critical processes, and memory thresholds using macros.
+Change the single item, that gets all the raw data, Zabbix active to passive based on your needs.
 
 ## Overview
 
-This template allows you to monitor various processes and services running on a system using Zabbix agent. You can define a list of processes to be monitored and set critical processes using macros.
+This is a Zabbix template designed to monitor processes and services running on a system using the Zabbix agent (version 6.2 and later).
 
-Please report issues or contribute on GitHub: [zbx_processes_monitor](https://github.com/zingaya/zbx_processes_monitor)
+Tested on Debian 8, 9, and 10, AlmaLinux 8. Should work for Windows.
+
+Please report issues or contribute on GitHub: https://github.com/zingaya/zbx_processes_monitor
 
 ## Author
 
