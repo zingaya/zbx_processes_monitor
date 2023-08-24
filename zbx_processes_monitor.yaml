@@ -366,12 +366,8 @@ zabbix_export:
             - name: maxmemlist
               value: '{$PROCESSES.MAXMEM}'
           lld_macro_paths:
-            - lld_macro: '{#PROCESS.CMD}'
-              path: $.command
             - lld_macro: '{#PROCESS.MAXMEM}'
               path: $.maxmemory
-            - lld_macro: '{#PROCESS.NAME}'
-              path: $.process
           overrides:
             - name: 'Critical processes'
               step: '1'
