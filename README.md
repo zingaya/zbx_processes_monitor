@@ -3,8 +3,8 @@
 ## Description
 
 This template allows you to monitor various processes and services running on a system using Zabbix agent. 
-Define a list of processes to be monitored, and the LLD will create the items regardless if the processes are currently running or not. And optionally set critical processes, and memory thresholds using macros.
-Change the single item, that gets all the raw data, Zabbix active to passive based on your needs.
+Define a list of processes to be monitored, and the LLD will create the items regardless if the processes are currently running or not. Optionally set critical processes, memory, and cpu thresholds using macros.
+Change item type that collects all the raw data, from Zabbix active to passive based on your needs.
 
 ## Overview
 
@@ -22,10 +22,12 @@ Leonardo Savoini
 
 |Name|Description|Default|Type|
 |----|-----------|-------|----|
-|{$PROCESSES.CMD}|Optional per-process command parameters or paths.|`CHANGE_THIS`|Text macro|
-|{$PROCESSES.CRIT}|Which processes will have a critical trigger.|`CHANGE_THIS`|Text macro|
-|{$PROCESSES.LIST}|Comma-delimited list of processes to be monitored.|`CHANGE_THIS`|Text macro|
-|{$PROCESSES.MAXMEM}|Optional per-process maximum memory usage.|`CHANGE_THIS`|Text macro|
+|{$PROCESSES.CMD}|Trigger will try to find this defined string in the whole command executed. Use this to default all triggers to this value, or use macro context. Leave empty for no alerts.|``|Text macro|
+|{$PROCESSES.CRIT}|Which ones of the processes will have a critical trigger. Use regular expression|`CHANGE_THIS`|Text macro|
+|{$PROCESSES.LIST}|A coma delimited list of all process to be monitored. Exact name of the process name. Example: systemd,ndbmtd,process_1,process_2|`CHANGE_THIS`|Text macro|
+|{$PROCESSES.MAXMEM}|Use this to default all triggers to this value, or use macro context. Leave empty or zero for no alerts|`0`|Integer macro|
+|{$PROCESSES.MAXCPU.USER}|Use this to default all triggers to this value, or use macro context. Remember to consider CPU cores. Leave zero for no alerts|`0`|Integer macro|
+|{$PROCESSES.MAXCPU.SYSTEM}|Use this to default all triggers to this value, or use macro context. Remember to consider CPU cores. Leave zero for no alerts|`0`|Integer macro|
 
 ## Template links
 
@@ -37,7 +39,23 @@ There are no template links in this template.
 |----|-----------|----|-----------------------|
 |Create processes|Discovery of processes based on macros.|`SCRIPT`|get.processes|
 
-## Items collected
+## Items
+
+|Name|Description|Type|Key and additional info|
+|----|-----------|----|-----------------------|
+|Get raw process info|Collects raw information about specified processes.|`ZABBIX_ACTIVE`|proc.get|
+
+## Triggers
+
+There are no triggers in this template.
+
+|Name|Description|Type|Key and additional info|
+|----|-----------|----|-----------------------|
+|Process {#PROCESS.NAME} command line|Process command line.|`DEPENDENT`|proc[{#PROCESS.NAME},cmdline]|
+|Process {#PROCESS.NAME} cpu time (user)|Process CPU time (user).|`DEPENDENT`|proc[{#PROCESS.NAME},cpuuser]|
+|Process {#PROCESS.NAME} memory usage|Process memory usage.|`DEPENDENT`|proc[{#PROCESS.NAME},memory]|
+
+## Items prototype
 
 |Name|Description|Type|Key and additional info|
 |----|-----------|----|-----------------------|
@@ -46,7 +64,7 @@ There are no template links in this template.
 |Process {#PROCESS.NAME} cpu time (user)|Process CPU time (user).|`DEPENDENT`|proc[{#PROCESS.NAME},cpuuser]|
 |Process {#PROCESS.NAME} memory usage|Process memory usage.|`DEPENDENT`|proc[{#PROCESS.NAME},memory]|
 
-## Triggers
+## Triggers prototype
 
 |Name|Description|Expression|Priority|
 |----|-----------|----------|--------|
@@ -58,4 +76,3 @@ There are no template links in this template.
 |Override Name|Step|Conditions|Operations|
 |-------------|----|----------|----------|
 |Critical processes|1|Processes with names specified by `{$PROCESSES.CRIT}` macro.|- Set high severity trigger prototype for "is not running" message.<br> - Set critical-process tag for item prototype.<br> - Set average severity trigger prototype for "is not being executed with the expected command line" message.|
-|Memory threshold|2|Processes with non-zero values in `{$PROCESSES.MAXMEM}` macro.|- Set discover flag for trigger prototype.|
