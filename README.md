@@ -10,6 +10,9 @@ Change item type that collects all the raw data, from Zabbix active to passive b
 
 This is a Zabbix template designed to monitor processes and services running on a system using the Zabbix agent (version 6.2 and later).
 
+Although, if you have an older Zabbix Agent, you could add this UserParameter. Not perfect, there is missing data but get the job done. Contributions are welcome.
+`UserParameter=proc.get,ps -eo pid,user:20,comm:50,time,rss,args --no-headers | awk '{s=$4;split(s,a,/-|:/);t=a[length(a)]+a[length(a)-1]*60+a[length(a)-2]*3600+a[length(a)-3]*86400;printf "{\"pid\":%d,\"user\":\"%s\",\"name\":\"%s\",\"cputime_system\":%d,\"rss\":%d,\"cmdline\":\"",$1,$2,$3,t,$5;for(i=6;i<=NF;i++){gsub(/"/,"\\\"",$i);printf "%s%s",$i,(i<NF?" ":"\"")}printf ",\"cputime_user\":0,\"swap\":0,\"threads\":0}\n"}' | grep -v 'awk.*args' | sed ':a;N;$!ba;s/\n/,/g' | awk 'BEGIN{print "["}{print $0}END{print "]"}`
+
 Tested on Debian 8, 9, and 10, AlmaLinux 8. Should work for Windows.
 
 Please report issues or contribute on GitHub: https://github.com/zingaya/zbx_processes_monitor
@@ -77,7 +80,3 @@ There are no triggers in this template.
 |-------------|----|----------|----------|
 |Critical processes|1|Processes with names specified by `{$PROCESSES.CRIT}` macro.|- Set high severity trigger prototype for "is not running" message.<br> - Set critical-process tag for item prototype.<br> - Set average severity trigger prototype for "is not being executed with the expected command line" message.|
 
-## Workaround for get.proc
-
-In case you have an older Zabbix Agent, you could add this UserParameter. Not perfect, there is missing data but get the job done.
-`UserParameter=proc.get,ps -eo pid,user,comm,time,rss,args --no-headers | awk '{split($4,a,/-|:/);time=(length(a)==4?a[1]*86400+a[2]*3600+a[3]*60+a[4]:a[1]*3600+a[2]*60+a[3]);args="";for(i=6;i<=NF;i++)gsub(/"/,"\\\"",$i);for(i=6;i<=NF;i++)args=args$i" ";sub(/ $/,"",args);print "{\"pid\":"$1",\"user\":\""$2"\",\"name\":\""$3"\",\"cputime_system\":"time",\"rss\":"$5",\"cmdline\":\""args"\",\"cputime_user\":"0",\"swap\":"0",\"threads\":"0"}"}' | grep -v 'args.*awk.*' | sed ':a;N;$!ba;s/\n/,/g' | awk 'BEGIN{print "["}{print $0}END{print "]"}'`
