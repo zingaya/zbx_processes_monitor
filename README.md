@@ -76,3 +76,8 @@ There are no triggers in this template.
 |Override Name|Step|Conditions|Operations|
 |-------------|----|----------|----------|
 |Critical processes|1|Processes with names specified by `{$PROCESSES.CRIT}` macro.|- Set high severity trigger prototype for "is not running" message.<br> - Set critical-process tag for item prototype.<br> - Set average severity trigger prototype for "is not being executed with the expected command line" message.|
+
+## Workaround for get.proc
+
+In case you have an older Zabbix Agent, you could add this UserParameter. Not perfect, there is missing data but get the job done.
+`UserParameter=proc.get,ps -eo pid,user,comm,time,rss,args --no-headers | awk '{split($4,a,/-|:/);time=(length(a)==4?a[1]*86400+a[2]*3600+a[3]*60+a[4]:a[1]*3600+a[2]*60+a[3]);args="";for(i=6;i<=NF;i++)gsub(/"/,"\\\"",$i);for(i=6;i<=NF;i++)args=args$i" ";sub(/ $/,"",args);print "{\"pid\":"$1",\"user\":\""$2"\",\"name\":\""$3"\",\"cputime_system\":"time",\"rss\":"$5",\"cmdline\":\""args"\",\"cputime_user\":"0",\"swap\":"0",\"threads\":"0"}"}' | grep -v 'args.*awk.*' | sed ':a;N;$!ba;s/\n/,/g' | awk 'BEGIN{print "["}{print $0}END{print "]"}'`
