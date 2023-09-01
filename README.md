@@ -10,8 +10,8 @@ Change item type that collects all the raw data, from Zabbix active to passive b
 
 This is a Zabbix template designed to monitor processes and services running on a system using the Zabbix agent (version 6.2 and later).
 
-Although, if you have an older Zabbix Agent, you could add this UserParameter. Not perfect, there is missing data but get the job done. Contributions are welcome.\
-`UserParameter=proc.get,ps -eo pid,user:20,comm:50,time,rss,args --no-headers | awk '{s=$4;split(s,a,/-|:/);t=a[length(a)]+a[length(a)-1]*60+a[length(a)-2]*3600+a[length(a)-3]*86400;printf "{\"pid\":%d,\"user\":\"%s\",\"name\":\"%s\",\"cputime_system\":%d,\"rss\":%d,\"cmdline\":\"",$1,$2,$3,t,$5;for(i=6;i<=NF;i++){gsub(/"/,"\\\"",$i);printf "%s%s",$i,(i<NF?" ":"\"")}printf ",\"cputime_user\":0,\"swap\":0,\"threads\":0}\n"}' | grep -v '[^]]awk ' | sed ':a;N;$!ba;s/\n/,/g' | awk 'BEGIN{print "["}{print $0}END{print "]"}'`
+Although, if you have an older Zabbix Agent, you could add this UserParameter. Not perfect, there is missing data but gets the job done. Contributions are welcome.\
+`UserParameter=proc.get,ps -eo pid,user:20,comm:50,time,rss,args --no-headers | awk '{s=$4;split(s,a,/-|:/);t=a[length(a)]+a[length(a)-1]*60+a[length(a)-2]*3600+a[length(a)-3]*86400;r=$5*1024;printf "{\"pid\":%d,\"user\":\"%s\",\"name\":\"%s\",\"cputime_system\":%d,\"rss\":%d,\"cmdline\":\"",$1,$2,$3,t,r;for(i=6;i<=NF;i++){gsub(/"/,"\\\"",$i);printf "%s%s",$i,(i<NF?" ":"\"")}printf ",\"cputime_user\":0,\"swap\":0,\"threads\":0}\n"}' | grep -v '[^]]awk ' | sed ':a;N;$!ba;s/\n/,/g' | awk 'BEGIN{print "["}{print $0}END{print "]"}'`
 
 Tested on Debian 8, 9, and 10, AlmaLinux 8. Should work for Windows.
 
